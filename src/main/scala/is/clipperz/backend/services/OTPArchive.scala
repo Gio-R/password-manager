@@ -27,6 +27,13 @@ type OTPKey = HexString
 
 // ------------------------
 
+case class SaveOTPBlobData(key: OTPKey, otpBlob: OTPBlob)
+object SaveOTPBlobData:
+  implicit val decoder: JsonDecoder[SaveOTPBlobData] = DeriveJsonDecoder.gen[SaveOTPBlobData]
+  implicit val encoder: JsonEncoder[SaveOTPBlobData] = DeriveJsonEncoder.gen[SaveOTPBlobData]
+
+// ------------------------
+
 trait OTPArchive:
   def getOTPBlob(hash: OTPKey, verifier: HexString): Task[OTPBlob]
   def saveOTPBlob(key: OTPKey, content: OTPBlob): Task[OTPKey]

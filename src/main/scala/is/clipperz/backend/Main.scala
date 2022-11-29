@@ -20,7 +20,7 @@ import zhttp.http.{
 }
 import zhttp.service.{ EventLoopGroup, Server }
 import zhttp.service.server.ServerChannelFactory
-import is.clipperz.backend.apis.{ blobsApi, loginApi, logoutApi, staticApi, usersApi }
+import is.clipperz.backend.apis.{ blobsApi, loginApi, logoutApi, staticApi, usersApi, otpsApi }
 import is.clipperz.backend.middleware.{ hashcash, sessionChecks }
 import is.clipperz.backend.services.{ BlobArchive, PRNG, SessionManager, SrpManager, TollManager, UserArchive }
 
@@ -34,6 +34,7 @@ import zio.Cause
 import zio.FiberRefs
 import zio.LogSpan
 import zhttp.http.HttpError.Custom
+import is.clipperz.backend.services.OTPArchive
 
 object Main extends zio.ZIOAppDefault:
   override val bootstrap =
@@ -41,21 +42,22 @@ object Main extends zio.ZIOAppDefault:
     Runtime.removeDefaultLoggers ++ Runtime.addLogger(CustomLogger.coloredLogger(LogLevel.Info)) // >>> SLF4J.slf4j(logFormat)
 
   type ClipperzEnvironment =
-    PRNG & SessionManager & TollManager & UserArchive & BlobArchive & SrpManager
+    PRNG & SessionManager & TollManager & UserArchive & BlobArchive & SrpManager & OTPArchive
 
   type ClipperzHttpApp = HttpApp[
     ClipperzEnvironment,
     Throwable,
   ]
 
-  val clipperzBackend: ClipperzHttpApp = { usersApi ++ loginApi ++ logoutApi ++ blobsApi ++ staticApi }
+  val clipperzBackend: ClipperzHttpApp = { usersApi ++ loginApi ++ logoutApi ++ blobsApi ++ staticApi ++ otpsApi }
   val completeClipperzBackend: ClipperzHttpApp = clipperzBackend @@ (sessionChecks ++ hashcash)
 
   val run = ZIOAppArgs.getArgs.flatMap { args =>
     if args.length == 3 then
       val blobsArchivePath = args(0).split("/").nn
       val usersArchivePath = args(1).split("/").nn
-      val port = args(2).toInt
+      val otpArchivePath = args(2).split("/").nn
+      val port = args(3).toInt
 
       val MB = 1024 * 1024
 
@@ -69,9 +71,11 @@ object Main extends zio.ZIOAppDefault:
 
       val blobBasePath = FileSystems.getDefault().nn.getPath(blobsArchivePath(0), blobsArchivePath.drop(1)*).nn
       val userBasePath = FileSystems.getDefault().nn.getPath(usersArchivePath(0), usersArchivePath.drop(1)*).nn
+      val otpBasePath = FileSystems.getDefault().nn.getPath(otpArchivePath(0), otpArchivePath.drop(1)*).nn
 
       blobBasePath.toFile().nn.mkdirs()
       userBasePath.toFile().nn.mkdirs()
+      otpBasePath.toFile().nn.mkdirs()
 
       server
         .make
@@ -83,6 +87,7 @@ object Main extends zio.ZIOAppDefault:
           TollManager.live,
           UserArchive.fs(userBasePath, 2, true),
           BlobArchive.fs(blobBasePath, 2, true),
+          OTPArchive.fs(otpBasePath, 2, true),
           SrpManager.v6a(),
           ServerChannelFactory.auto,
           EventLoopGroup.auto(nThreads),
