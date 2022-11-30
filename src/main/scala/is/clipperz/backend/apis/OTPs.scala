@@ -33,14 +33,14 @@ val otpsApi: ClipperzHttpApp = Http.collectZIO {
       )
       .map(results => Response.text(s"${results}"))
       .catchSome {
-        case ex: EmptyContentException =>
-          ZIO.logWarningCause(s"${ex.getMessage()}", Cause.fail(ex)).as(Response(status = Status.BadRequest))
-        case ex: BadRequestException =>
-          ZIO.logWarningCause(s"${ex.getMessage()}", Cause.fail(ex)).as(Response(status = Status.BadRequest))
-        case ex: NonWritableArchiveException =>
-          ZIO.logFatalCause(s"${ex.getMessage()}", Cause.fail(ex)).as(Response(status = Status.InternalServerError))
-        case ex: FailedConversionException =>
-          ZIO.logWarningCause(s"${ex.getMessage()}", Cause.fail(ex)).as(Response(status = Status.BadRequest))
+        // case ex: EmptyContentException =>
+        //   ZIO.logWarningCause(s"${ex.getMessage()}", Cause.fail(ex)).as(Response(status = Status.BadRequest))
+        // case ex: BadRequestException =>
+        //   ZIO.logWarningCause(s"${ex.getMessage()}", Cause.fail(ex)).as(Response(status = Status.BadRequest))
+        // case ex: NonWritableArchiveException =>
+        //   ZIO.logFatalCause(s"${ex.getMessage()}", Cause.fail(ex)).as(Response(status = Status.InternalServerError))
+        // case ex: FailedConversionException =>
+        //   ZIO.logWarningCause(s"${ex.getMessage()}", Cause.fail(ex)).as(Response(status = Status.BadRequest))
         case ex => ZIO.logFatalCause(s"${ex.getMessage()}", Cause.fail(ex)).as(Response(status = Status.InternalServerError))
       } @@ LogAspect.logAnnotateRequestData(request)
 
