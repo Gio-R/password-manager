@@ -40,6 +40,8 @@ import is.clipperz.backend.functions.SrpFunctions.SrpFunctionsV6a
 import is.clipperz.backend.functions.SrpFunctions
 import is.clipperz.backend.services.SRPStep2Response
 import is.clipperz.backend.services.OTPArchive
+import is.clipperz.backend.services.OTPBlob
+import is.clipperz.backend.services.SaveOTPBlobData
 
 object OTPSpec extends ZIOSpecDefault:
   val app = Main.clipperzBackend
@@ -58,19 +60,31 @@ object OTPSpec extends ZIOSpecDefault:
 
   val sessionKey = "sessionKey"
 
-  // val saveOTPWithSession = Request(
-  //   url = URL(!! / "otps"),
-  //   method = Method.POST,
-  //   headers = Headers((SessionManager.sessionKeyHeaderName, sessionKey)),
-  //   version = Version.Http_1_1,
-  // )
+  def prepareDelete(key: HexString, blob: OTPBlob, session: Boolean): Request =
+    Request(
+      url = URL(!! / "otps" / key.toString),
+      method = Method.DELETE,
+      headers = if (session) Headers((SessionManager.sessionKeyHeaderName, sessionKey)) else Headers.empty,
+      body = Body.fromString(SaveOTPBlobData(key, blob).toJson, StandardCharsets.UTF_8.nn),
+      version = Version.Http_1_1
+    )
 
-  // val saveOTPWithoutSession = Request(
-  //   url = URL(!! / "logout"),
-  //   method = Method.POST,
-  //   headers = Headers.empty,
-  //   version = Version.Http_1_1,
-  // )
+  def prepareSave(key: HexString, blob: OTPBlob, session: Boolean): Request =
+    Request(
+      url = URL(!! / "otps" / key.toString),
+      method = Method.POST,
+      headers = if (session) Headers((SessionManager.sessionKeyHeaderName, sessionKey)) else Headers.empty,
+      body = Body.fromString(SaveOTPBlobData(key, blob).toJson, StandardCharsets.UTF_8.nn),
+      version = Version.Http_1_1
+    )
+
+  def prepareGet(key: HexString, verifier: HexString, session: Boolean): Request =
+    Request(
+      url = URL(!! / "otps" / key.toString),
+      method = Method.GET,
+      headers = if (session) Headers((SessionManager.sessionKeyHeaderName, sessionKey)) else Headers.empty,
+      version = Version.Http_1_1
+    )
 
   def spec = suite("LogoutApis")(
     test("DELETE not found -> 404") {

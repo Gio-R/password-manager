@@ -23,7 +23,7 @@ import is.clipperz.backend.services.OTPArchive
 import is.clipperz.backend.services.SaveOTPBlobData
 
 val otpsApi: ClipperzHttpApp = Http.collectZIO {
-  case request @ Method.POST -> !! / "otps" =>
+  case request @ Method.POST -> !! / "otps" / hash =>
     ZIO
       .service[OTPArchive]
       .zip(ZIO.succeed(request.body.asStream))
