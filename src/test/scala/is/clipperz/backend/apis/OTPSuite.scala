@@ -80,7 +80,7 @@ object OTPSpec extends ZIOSpecDefault:
 
   def prepareGet(key: HexString, verifier: HexString, session: Boolean): Request =
     Request(
-      url = URL(!! / "otps" / key.toString),
+      url = URL(!! / "otps" / s"${key.toString}?verifier=${verifier}"),
       method = Method.GET,
       headers = if (session) Headers((SessionManager.sessionKeyHeaderName, sessionKey)) else Headers.empty,
       version = Version.Http_1_1

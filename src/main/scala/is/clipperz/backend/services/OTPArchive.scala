@@ -17,11 +17,18 @@ import is.clipperz.backend.exceptions.NonWritableArchiveException
 import is.clipperz.backend.exceptions.NonAuthorizedException
 import is.clipperz.backend.exceptions.BadRequestException
 import java.nio.charset.StandardCharsets
+import java.util.Date
+import java.time.Instant
 
 case class OTPBlob(verifier: HexString, encryptedPassword: HexString)
 object OTPBlob:
   implicit val decoder: JsonDecoder[OTPBlob] = DeriveJsonDecoder.gen[OTPBlob]
   implicit val encoder: JsonEncoder[OTPBlob] = DeriveJsonEncoder.gen[OTPBlob]
+
+case class UsedOTPBlob(verifier: HexString, dateTime: Instant, useCase: String)
+object UsedOTPBlob:
+  implicit val decoder: JsonDecoder[UsedOTPBlob] = DeriveJsonDecoder.gen[UsedOTPBlob]
+  implicit val encoder: JsonEncoder[UsedOTPBlob] = DeriveJsonEncoder.gen[UsedOTPBlob]
 
 type OTPKey = HexString
 
@@ -35,7 +42,7 @@ object SaveOTPBlobData:
 // ------------------------
 
 trait OTPArchive:
-  def getOTPBlob(hash: OTPKey, verifier: HexString): Task[OTPBlob]
+  def getOTPBlob(hash: OTPKey, verifier: HexString): Task[Either[UsedOTPBlob, OTPBlob]]
   def saveOTPBlob(key: OTPKey, content: OTPBlob): Task[OTPKey]
   def deleteOTPBlob(key: OTPKey, content: OTPBlob): Task[Boolean]
 
@@ -43,7 +50,7 @@ object OTPArchive:
   val WAIT_TIME = 100
 
   case class FileSystemOTPArchive(keyBlobArchive: KeyBlobArchive, tmpDir: Path) extends OTPArchive:
-    override def getOTPBlob(hash: OTPKey, verifier: HexString): Task[OTPBlob] =
+    override def getOTPBlob(hash: OTPKey, verifier: HexString): Task[Either[UsedOTPBlob, OTPBlob]] =
       keyBlobArchive
         .getBlob(hash.toString)
         .flatMap(content =>
@@ -51,7 +58,18 @@ object OTPArchive:
             .flatMap(bl => 
               keyBlobArchive
                 .deleteBlob(hash.toString)
-                .flatMap(_ => if bl.verifier == verifier then ZIO.succeed(bl) else ZIO.fail(new NonAuthorizedException("Sent verifier is not correct")))
+                .flatMap(_ => 
+                  if bl.verifier == verifier then 
+                    val usedOTPBlob = UsedOTPBlob(verifier, Instant.now().nn, "USED")
+                    keyBlobArchive
+                      .saveBlob(hash.toString, ZStream.fromChunks(Chunk.fromArray(usedOTPBlob.toJson.getBytes(StandardCharsets.UTF_8).nn)))
+                      .flatMap(_ => ZIO.succeed(Right(bl)))
+                  else 
+                    val usedOTPBlob = UsedOTPBlob(verifier, Instant.now().nn, "DISABLED")
+                    keyBlobArchive
+                      .saveBlob(hash.toString, ZStream.fromChunks(Chunk.fromArray(usedOTPBlob.toJson.getBytes(StandardCharsets.UTF_8).nn)))
+                      .flatMap(_ => ZIO.fail(new NonAuthorizedException("Sent verifier is not correct")))
+                )
             )
         )
 
