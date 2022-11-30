@@ -80,6 +80,15 @@ object OTPArchiveSpec extends ZIOSpecDefault:
         } yield res
     } @@ TestAspect.before(ZIO.succeed(FileSystem.deleteAllFiles(otpBasePath.toFile().nn)))
       @@ TestAspect.after(ZIO.succeed(FileSystem.deleteAllFiles(otpBasePath.toFile().nn))),
+    test("getOTP two times - fail") {
+      for {
+          archive <- ZIO.service[OTPArchive]
+          _ <- archive.saveOTPBlob(otpHash, goodBlob)
+          _ <- archive.getOTPBlob(otpHash, goodVerifier)
+          res <- assertZIO(archive.getOTPBlob(otpHash, goodVerifier).exit)(fails(isSubtype[ResourceNotFoundException](anything)))
+        } yield res
+    } @@ TestAspect.before(ZIO.succeed(FileSystem.deleteAllFiles(otpBasePath.toFile().nn)))
+      @@ TestAspect.after(ZIO.succeed(FileSystem.deleteAllFiles(otpBasePath.toFile().nn))),
     test("getOTP after wrong verifier - fail - not found") {
       for {
           archive <- ZIO.service[OTPArchive]

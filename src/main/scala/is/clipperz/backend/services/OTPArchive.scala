@@ -49,12 +49,9 @@ object OTPArchive:
         .flatMap(content =>
           fromStream[OTPBlob](content)
             .flatMap(bl => 
-              if bl.verifier == verifier then
-                ZIO.succeed(bl)
-              else
-                keyBlobArchive
-                  .deleteBlob(hash.toString)
-                  .flatMap(_ => ZIO.fail(new NonAuthorizedException("Sent verifier is not correct")))
+              keyBlobArchive
+                .deleteBlob(hash.toString)
+                .flatMap(_ => if bl.verifier == verifier then ZIO.succeed(bl) else ZIO.fail(new NonAuthorizedException("Sent verifier is not correct")))
             )
         )
 
