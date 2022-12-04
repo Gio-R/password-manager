@@ -28,13 +28,14 @@ import Views.SimpleWebComponents (simpleButton, simpleButtonWithId, submenu, com
 import OperationalWidgets.ImportWidget (importWidget)
 import OperationalWidgets.ExportWidget (exportWidget)
 import OperationalWidgets.ChangePasswordWidget (changePasswordWidget, emptyChangePasswordDataForm)
+import OperationalWidgets.OTPsWidget (otpsWidget)
 import OperationalWidgets.UserPreferencesWidget (userPreferencesWidget)
 import OperationalWidgets.DeleteUserWidget (deleteUserWidget)
 import OperationalWidgets.PinWidget (setPinWidget)
 
 data UserAreaAction = Loaded (Either AppError Index) | Lock | Logout | DeleteAccount | NoAction | GetIndexError AppError
 
-data UserAreaListVoice = Export | Import | Pin | Delete | Preferences | ChangePassword | VLock | VLogout | About
+data UserAreaListVoice = Export | Import | Pin | Delete | Preferences | ChangePassword | VLock | VLogout | About | OTPs
 
 derive instance eqUserAreaListVoice :: Eq UserAreaListVoice
 
@@ -45,6 +46,7 @@ defaultMenu = \isOffline -> [
   Tuple false (\b -> submenu b (simpleButton "Account" false unit) [
     simpleButtonWithId "preferencesButton" "Preferences" isOffline Preferences
   , simpleButtonWithId "passphraseButton" "Passphrase" isOffline ChangePassword
+  , simpleButtonWithId "otps" "One-Time Passwords" isOffline OTPs
   , simpleButtonWithId "deviceButton" "Device PIN" false Pin
   , simpleButtonWithId "deleteButton" "Delete account" isOffline Delete
   ])
@@ -79,6 +81,7 @@ userAreaWidget hidden isOffline = userAreaView hidden (defaultMenu isOffline) (d
         Pin -> div [Props.className "forUser"] [setPinWidget Default]
         Delete -> div [Props.className "forUser"] [DeleteAccount <$ deleteUserWidget]
         Preferences -> div [Props.className "forUser"] [(NoAction) <$ userPreferencesWidget Default]
+        OTPs -> div [Props.className "forUser"] [NoAction <$ otpsWidget Default]
         ChangePassword -> div [Props.className "forUser"] [changePasswordWidget Default emptyChangePasswordDataForm]
         VLock -> pure Lock
         VLogout -> pure Logout
