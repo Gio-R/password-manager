@@ -19,13 +19,20 @@ import is.clipperz.backend.exceptions.BadRequestException
 import java.nio.charset.StandardCharsets
 import java.util.Date
 import java.time.Instant
+import is.clipperz.backend.exceptions.FailedConversionException
 
 case class OTPBlob(verifier: HexString, encryptedPassword: HexString)
 object OTPBlob:
   implicit val decoder: JsonDecoder[OTPBlob] = DeriveJsonDecoder.gen[OTPBlob]
   implicit val encoder: JsonEncoder[OTPBlob] = DeriveJsonEncoder.gen[OTPBlob]
 
-case class UsedOTPBlob(verifier: HexString, dateTime: Instant, useCase: String)
+enum OTPUseCases:
+  case USED, DISABLED
+object OTPUseCases:
+  implicit val decoder: JsonDecoder[OTPUseCases] = DeriveJsonDecoder.gen[OTPUseCases]
+  implicit val encoder: JsonEncoder[OTPUseCases] = DeriveJsonEncoder.gen[OTPUseCases]
+
+case class UsedOTPBlob(verifier: HexString, dateTime: Instant, useCase: OTPUseCases)
 object UsedOTPBlob:
   implicit val decoder: JsonDecoder[UsedOTPBlob] = DeriveJsonDecoder.gen[UsedOTPBlob]
   implicit val encoder: JsonEncoder[UsedOTPBlob] = DeriveJsonEncoder.gen[UsedOTPBlob]
@@ -44,7 +51,7 @@ object SaveOTPBlobData:
 trait OTPArchive:
   def getOTPBlob(hash: OTPKey, verifier: HexString): Task[Either[UsedOTPBlob, OTPBlob]]
   def saveOTPBlob(key: OTPKey, content: OTPBlob): Task[OTPKey]
-  def deleteOTPBlob(key: OTPKey, content: OTPBlob): Task[Boolean]
+  def deleteOTPBlob(key: OTPKey, content: Either[UsedOTPBlob, OTPBlob]): Task[Boolean]
 
 object OTPArchive:
   val WAIT_TIME = 100
@@ -54,23 +61,33 @@ object OTPArchive:
       keyBlobArchive
         .getBlob(hash.toString)
         .flatMap(content =>
-          fromStream[OTPBlob](content)
-            .flatMap(bl => 
+          fromStream[UsedOTPBlob](content)
+            .flatMap(usedBlob => 
               keyBlobArchive
                 .deleteBlob(hash.toString)
                 .flatMap(_ => 
-                  if bl.verifier == verifier then 
-                    val usedOTPBlob = UsedOTPBlob(verifier, Instant.now().nn, "USED")
-                    keyBlobArchive
-                      .saveBlob(hash.toString, ZStream.fromChunks(Chunk.fromArray(usedOTPBlob.toJson.getBytes(StandardCharsets.UTF_8).nn)))
-                      .flatMap(_ => ZIO.succeed(Right(bl)))
-                  else 
-                    val usedOTPBlob = UsedOTPBlob(verifier, Instant.now().nn, "DISABLED")
-                    keyBlobArchive
-                      .saveBlob(hash.toString, ZStream.fromChunks(Chunk.fromArray(usedOTPBlob.toJson.getBytes(StandardCharsets.UTF_8).nn)))
-                      .flatMap(_ => ZIO.fail(new NonAuthorizedException("Sent verifier is not correct")))
+                  if usedBlob.verifier == verifier then
+                    ZIO.succeed(Left(usedBlob))
+                  else
+                    ZIO.fail(new NonAuthorizedException("Sent verifier is not correct"))
                 )
             )
+            .catchSome {
+              case ex: FailedConversionException =>
+                fromStream[OTPBlob](content)
+                  .flatMap(blob =>
+                    if blob.verifier == verifier then 
+                      val usedOTPBlob = UsedOTPBlob(blob.verifier, Instant.now().nn, OTPUseCases.USED)
+                      keyBlobArchive
+                        .saveBlob(hash.toString, ZStream.fromChunks(Chunk.fromArray(usedOTPBlob.toJson.getBytes(StandardCharsets.UTF_8).nn)))
+                        .flatMap(_ => ZIO.succeed(Right(blob)))
+                    else 
+                      val usedOTPBlob = UsedOTPBlob(blob.verifier, Instant.now().nn, OTPUseCases.DISABLED)
+                      keyBlobArchive
+                        .saveBlob(hash.toString, ZStream.fromChunks(Chunk.fromArray(usedOTPBlob.toJson.getBytes(StandardCharsets.UTF_8).nn)))
+                        .flatMap(_ => ZIO.fail(new NonAuthorizedException("Sent verifier is not correct")))  
+                  )
+            }
         )
 
     override def saveOTPBlob(key: OTPKey, content: OTPBlob): Task[OTPKey] =
@@ -81,9 +98,12 @@ object OTPArchive:
           )
           .map(_ => key)
 
-    override def deleteOTPBlob(key: OTPKey, content: OTPBlob): Task[Boolean] =
+    override def deleteOTPBlob(key: OTPKey, content: Either[UsedOTPBlob, OTPBlob]): Task[Boolean] =
+      val verifier = content match
+                      case Left(o) => o.verifier
+                      case Right(o) => o.verifier
       this
-        .getOTPBlob(key, content.verifier)
+        .getOTPBlob(key, verifier)
         .flatMap(blob =>
           if blob == content then
             keyBlobArchive.deleteBlob(key.toString())

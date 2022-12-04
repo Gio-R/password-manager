@@ -8,7 +8,7 @@ import scala.language.postfixOps
 import zio.{ Chunk, ZIO }
 import zio.stream.{ ZStream, ZSink }
 import zio.test.Assertion.{ nothing, throws, throwsA, fails, isSubtype, anything }
-import zio.test.{ ZIOSpecDefault, assertTrue, assert, assertCompletes, assertZIO, TestAspect }
+import zio.test.{ ZIOSpecDefault, assertTrue, assert, assertNever, assertCompletes, assertZIO, TestAspect }
 import zio.json.EncoderOps
 import zhttp.http.{ Version, Headers, Method, URL, Request, Body }
 import zhttp.http.*
@@ -52,7 +52,7 @@ object OTPArchiveSpec extends ZIOSpecDefault:
     test("deleteOTP - fail - not found") {
       for {
         archive <- ZIO.service[OTPArchive]
-        res <- assertZIO(archive.deleteOTPBlob(otpHash, goodBlob).exit)(fails(isSubtype[ResourceNotFoundException](anything)))
+        res <- assertZIO(archive.deleteOTPBlob(otpHash, Right(goodBlob)).exit)(fails(isSubtype[ResourceNotFoundException](anything)))
       } yield res
     } @@ TestAspect.before(ZIO.succeed(FileSystem.deleteAllFiles(otpBasePath.toFile().nn)))
       @@ TestAspect.after(ZIO.succeed(FileSystem.deleteAllFiles(otpBasePath.toFile().nn))),
@@ -61,7 +61,7 @@ object OTPArchiveSpec extends ZIOSpecDefault:
           archive <- ZIO.service[OTPArchive]
           key <- archive.saveOTPBlob(otpHash, goodBlob)
           content <- archive.getOTPBlob(otpHash, goodVerifier)
-        } yield assertTrue(key == otpHash, content == goodBlob)
+        } yield assertTrue(key == otpHash, content == Right(goodBlob))
     } @@ TestAspect.before(ZIO.succeed(FileSystem.deleteAllFiles(otpBasePath.toFile().nn)))
       @@ TestAspect.after(ZIO.succeed(FileSystem.deleteAllFiles(otpBasePath.toFile().nn))),
     test("getOTP - success") {
@@ -69,7 +69,7 @@ object OTPArchiveSpec extends ZIOSpecDefault:
           archive <- ZIO.service[OTPArchive]
           _ <- archive.saveOTPBlob(otpHash, goodBlob)
           content <- archive.getOTPBlob(otpHash, goodVerifier)
-        } yield assertTrue(content == goodBlob)
+        } yield assertTrue(content == Right(goodBlob))
     } @@ TestAspect.before(ZIO.succeed(FileSystem.deleteAllFiles(otpBasePath.toFile().nn)))
       @@ TestAspect.after(ZIO.succeed(FileSystem.deleteAllFiles(otpBasePath.toFile().nn))),
     test("getOTP - fail - wrong verifier") {
@@ -80,13 +80,15 @@ object OTPArchiveSpec extends ZIOSpecDefault:
         } yield res
     } @@ TestAspect.before(ZIO.succeed(FileSystem.deleteAllFiles(otpBasePath.toFile().nn)))
       @@ TestAspect.after(ZIO.succeed(FileSystem.deleteAllFiles(otpBasePath.toFile().nn))),
-    test("getOTP two times - fail") {
+    test("getOTP two times - find used otp blob") {
       for {
           archive <- ZIO.service[OTPArchive]
           _ <- archive.saveOTPBlob(otpHash, goodBlob)
           _ <- archive.getOTPBlob(otpHash, goodVerifier)
-          res <- assertZIO(archive.getOTPBlob(otpHash, goodVerifier).exit)(fails(isSubtype[ResourceNotFoundException](anything)))
-        } yield res
+          content <- archive.getOTPBlob(otpHash, goodVerifier)
+      } yield content match
+                case Left(UsedOTPBlob(v, _, useCase)) => assertTrue(v == goodVerifier, useCase == OTPUseCases.USED)
+                case _ => assertNever("Incorrect result value")
     } @@ TestAspect.before(ZIO.succeed(FileSystem.deleteAllFiles(otpBasePath.toFile().nn)))
       @@ TestAspect.after(ZIO.succeed(FileSystem.deleteAllFiles(otpBasePath.toFile().nn))),
     test("getOTP after wrong verifier - fail - not found") {
@@ -94,15 +96,17 @@ object OTPArchiveSpec extends ZIOSpecDefault:
           archive <- ZIO.service[OTPArchive]
           _ <- archive.saveOTPBlob(otpHash, goodBlob)
           _ <- assertZIO(archive.getOTPBlob(otpHash, badVerifier).exit)(fails(isSubtype[NonAuthorizedException](anything)))
-          res <- assertZIO(archive.getOTPBlob(otpHash, goodVerifier).exit)(fails(isSubtype[ResourceNotFoundException](anything)))
-        } yield res
+          content <- archive.getOTPBlob(otpHash, goodVerifier)
+      } yield content match
+                case Left(UsedOTPBlob(v, _, useCase)) => assertTrue(v == goodVerifier, useCase == OTPUseCases.DISABLED)
+                case _ => assertNever("Incorrect result value")
     } @@ TestAspect.before(ZIO.succeed(FileSystem.deleteAllFiles(otpBasePath.toFile().nn)))
       @@ TestAspect.after(ZIO.succeed(FileSystem.deleteAllFiles(otpBasePath.toFile().nn))),
     test("deleteOTP - fail - different blob") {
       for {
           archive <- ZIO.service[OTPArchive]
           _ <- archive.saveOTPBlob(otpHash, goodBlob)
-          res <- assertZIO(archive.deleteOTPBlob(otpHash, badBlob).exit)(fails(isSubtype[NonAuthorizedException](anything)))
+          res <- assertZIO(archive.deleteOTPBlob(otpHash, Right(badBlob)).exit)(fails(isSubtype[NonAuthorizedException](anything)))
         } yield res
     } @@ TestAspect.before(ZIO.succeed(FileSystem.deleteAllFiles(otpBasePath.toFile().nn)))
       @@ TestAspect.after(ZIO.succeed(FileSystem.deleteAllFiles(otpBasePath.toFile().nn))),
@@ -110,10 +114,10 @@ object OTPArchiveSpec extends ZIOSpecDefault:
       for {
           archive <- ZIO.service[OTPArchive]
           _ <- archive.saveOTPBlob(otpHash, goodBlob)
-          _ <- archive.deleteOTPBlob(otpHash, goodBlob)
+          _ <- archive.deleteOTPBlob(otpHash, Right(goodBlob))
           res <- assertZIO(archive.getOTPBlob(otpHash, goodVerifier).exit)(fails(isSubtype[ResourceNotFoundException](anything)))
         } yield res
     } @@ TestAspect.before(ZIO.succeed(FileSystem.deleteAllFiles(otpBasePath.toFile().nn)))
-      @@ TestAspect.after(ZIO.succeed(FileSystem.deleteAllFiles(otpBasePath.toFile().nn)))
+      @@ TestAspect.after(ZIO.succeed(FileSystem.deleteAllFiles(otpBasePath.toFile().nn))),
   ).provideSomeLayerShared(environment) @@
     TestAspect.sequential
