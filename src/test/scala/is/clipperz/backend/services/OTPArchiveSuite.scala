@@ -26,6 +26,7 @@ import is.clipperz.backend.exceptions.BadRequestException
 import zio.test.TestEnvironment
 import is.clipperz.backend.exceptions.NonAuthorizedException
 import zio.ZLayer
+import java.time.Instant
 
 object OTPArchiveSpec extends ZIOSpecDefault:
   val otpBasePath = FileSystems.getDefault().nn.getPath("target", "tests", "archive", "otps").nn
@@ -40,6 +41,7 @@ object OTPArchiveSpec extends ZIOSpecDefault:
   val goodBlob = OTPBlob(goodVerifier, encryptedPassword)
   val badBlob = OTPBlob(badVerifier, encryptedPassword)
   
+  val badUsedOTPBlob = UsedOTPBlob(badVerifier, Instant.now().nn, OTPUseCases.USED)
 
   def spec = suite("BlobArchive")(
     test("getOTP - fail - not found") {
@@ -102,7 +104,7 @@ object OTPArchiveSpec extends ZIOSpecDefault:
                 case _ => assertNever("Incorrect result value")
     } @@ TestAspect.before(ZIO.succeed(FileSystem.deleteAllFiles(otpBasePath.toFile().nn)))
       @@ TestAspect.after(ZIO.succeed(FileSystem.deleteAllFiles(otpBasePath.toFile().nn))),
-    test("deleteOTP - fail - different blob") {
+    test("deleteOTP unused otp - fail - different blob") {
       for {
           archive <- ZIO.service[OTPArchive]
           _ <- archive.saveOTPBlob(otpHash, goodBlob)
@@ -110,11 +112,31 @@ object OTPArchiveSpec extends ZIOSpecDefault:
         } yield res
     } @@ TestAspect.before(ZIO.succeed(FileSystem.deleteAllFiles(otpBasePath.toFile().nn)))
       @@ TestAspect.after(ZIO.succeed(FileSystem.deleteAllFiles(otpBasePath.toFile().nn))),
-    test("deleteOTP - success") {
+    test("deleteOTP unused otp - success") {
       for {
           archive <- ZIO.service[OTPArchive]
           _ <- archive.saveOTPBlob(otpHash, goodBlob)
           _ <- archive.deleteOTPBlob(otpHash, Right(goodBlob))
+          res <- assertZIO(archive.getOTPBlob(otpHash, goodVerifier).exit)(fails(isSubtype[ResourceNotFoundException](anything)))
+        } yield res
+    } @@ TestAspect.before(ZIO.succeed(FileSystem.deleteAllFiles(otpBasePath.toFile().nn)))
+      @@ TestAspect.after(ZIO.succeed(FileSystem.deleteAllFiles(otpBasePath.toFile().nn))),
+    test("deleteOTP used otp - fail - different blob") {
+      for {
+          archive <- ZIO.service[OTPArchive]
+          _ <- archive.saveOTPBlob(otpHash, goodBlob)
+          _ <- archive.getOTPBlob(otpHash, goodVerifier)
+          res <- assertZIO(archive.deleteOTPBlob(otpHash, Left(badUsedOTPBlob)).exit)(fails(isSubtype[NonAuthorizedException](anything)))
+        } yield res
+    } @@ TestAspect.before(ZIO.succeed(FileSystem.deleteAllFiles(otpBasePath.toFile().nn)))
+      @@ TestAspect.after(ZIO.succeed(FileSystem.deleteAllFiles(otpBasePath.toFile().nn))),
+    test("deleteOTP used otp - success") {
+      for {
+          archive <- ZIO.service[OTPArchive]
+          _ <- archive.saveOTPBlob(otpHash, goodBlob)
+          _ <- archive.getOTPBlob(otpHash, goodVerifier)
+          usedOTPBlob <- archive.getOTPBlob(otpHash, goodVerifier)
+          _ <- archive.deleteOTPBlob(otpHash, usedOTPBlob)
           res <- assertZIO(archive.getOTPBlob(otpHash, goodVerifier).exit)(fails(isSubtype[ResourceNotFoundException](anything)))
         } yield res
     } @@ TestAspect.before(ZIO.succeed(FileSystem.deleteAllFiles(otpBasePath.toFile().nn)))
