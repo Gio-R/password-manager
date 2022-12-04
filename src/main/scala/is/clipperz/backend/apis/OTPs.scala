@@ -21,6 +21,8 @@ import zio.Cause
 import is.clipperz.backend.LogAspect
 import is.clipperz.backend.services.OTPArchive
 import is.clipperz.backend.services.SaveOTPBlobData
+import is.clipperz.backend.services.SessionManager
+import is.clipperz.backend.services.SaveUsedOTPBlobData
 
 val otpsApi: ClipperzHttpApp = Http.collectZIO {
   case request @ Method.POST -> !! / "otps" / hash =>
@@ -45,7 +47,40 @@ val otpsApi: ClipperzHttpApp = Http.collectZIO {
       } @@ LogAspect.logAnnotateRequestData(request)
 
   case request @ Method.DELETE -> !! / "otps" / hash =>
-    ZIO.succeed(Response(status = Status.NotImplemented)) @@ LogAspect.logAnnotateRequestData(request) 
+    ZIO
+      .service[OTPArchive]
+      // .zip(ZIO.service[SessionManager])
+      .zip(ZIO.succeed(request.body.asStream))
+      .flatMap((otpArchive, /* sessionManager, */ content) =>
+        fromStream[SaveOTPBlobData](content)
+          .flatMap(otpBlob =>
+            if otpBlob.key == HexString(hash) then
+              otpArchive.deleteOTPBlob(otpBlob.key, Right(otpBlob.otpBlob))
+            else
+              ZIO.fail(new BadRequestException("Hash and key do not correspond"))
+          )
+          .catchSome {
+            case ex: FailedConversionException =>
+              fromStream[SaveUsedOTPBlobData](content)
+                .flatMap(usedBlob =>
+                  if usedBlob.key == HexString(hash) then
+                    otpArchive.deleteOTPBlob(usedBlob.key, Left(usedBlob.otpBlob))
+                  else
+                    ZIO.fail(new BadRequestException("Hash and key do not correspond"))
+                )
+          }
+          .map(b => if b then Response.ok else Response(status = Status.NotFound))
+      )
+      .catchSome {
+        case ex: ResourceNotFoundException => ZIO.succeed(Response(status = Status.NotFound))
+        case ex: BadRequestException =>
+          ZIO.logInfoCause(s"${ex.getMessage()}", Cause.fail(ex)).as(Response(status = Status.BadRequest))
+        case ex: NonWritableArchiveException =>
+          ZIO.logFatalCause(s"${ex.getMessage()}", Cause.fail(ex)).as(Response(status = Status.InternalServerError))
+        case ex: FailedConversionException =>
+          ZIO.logWarningCause(s"${ex.getMessage()}", Cause.fail(ex)).as(Response(status = Status.BadRequest))
+        case ex => ZIO.logFatalCause(s"${ex.getMessage()}", Cause.fail(ex)).as(Response(status = Status.InternalServerError))
+      } @@ LogAspect.logAnnotateRequestData(request) 
 
   case request @ Method.GET -> !! / "otps" / hash =>
     ZIO.succeed(Response(status = Status.NotImplemented)) @@ LogAspect.logAnnotateRequestData(request)
