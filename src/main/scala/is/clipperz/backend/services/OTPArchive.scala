@@ -46,6 +46,11 @@ object SaveOTPBlobData:
   implicit val decoder: JsonDecoder[SaveOTPBlobData] = DeriveJsonDecoder.gen[SaveOTPBlobData]
   implicit val encoder: JsonEncoder[SaveOTPBlobData] = DeriveJsonEncoder.gen[SaveOTPBlobData]
 
+case class SaveUsedOTPBlobData(key: OTPKey, otpBlob: UsedOTPBlob)
+object SaveUsedOTPBlobData:
+  implicit val decoder: JsonDecoder[SaveUsedOTPBlobData] = DeriveJsonDecoder.gen[SaveUsedOTPBlobData]
+  implicit val encoder: JsonEncoder[SaveUsedOTPBlobData] = DeriveJsonEncoder.gen[SaveUsedOTPBlobData]
+
 // ------------------------
 
 trait OTPArchive:
