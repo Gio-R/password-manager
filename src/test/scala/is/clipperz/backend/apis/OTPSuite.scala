@@ -94,7 +94,7 @@ object OTPSpec extends ZIOSpecDefault:
 
   def prepareGet(key: HexString, verifier: HexString, session: Boolean): Request =
     Request(
-      url = URL(!! / "otps" / s"${key.toString}?verifier=${verifier}"),
+      url = URL(!! / "otps" / s"${key.toString}", queryParams = Map(("verifier", List(verifier.toString())))),
       method = Method.GET,
       headers = if (session) Headers((SessionManager.sessionKeyHeaderName, sessionKey)) else Headers.empty,
       version = Version.Http_1_1
@@ -188,22 +188,22 @@ object OTPSpec extends ZIOSpecDefault:
       @@ TestAspect.before(prepareSession(c))
       @@ TestAspect.after(deleteSession())
       @@ TestAspect.after(ZIO.succeed(FileSystem.deleteAllFiles(otpBasePath.toFile().nn))),
-    test("POST / GET bad verifier -> 200, 402") {
+    test("POST / GET bad verifier -> 200, 403") {
       for {
         statusCodePost <- app(prepareSave(otpHash, goodBlob, true)).map(response => response.status.code)
         statusCodeGet <- app(prepareGet(otpHash, badVerifier, true)).map(res => res.status.code)
-      } yield assertTrue(statusCodePost == 200, statusCodeGet == 402)
+      } yield assertTrue(statusCodePost == 200, statusCodeGet == 403)
     } @@ TestAspect.before(ZIO.succeed(FileSystem.deleteAllFiles(otpBasePath.toFile().nn)))
       @@ TestAspect.before(prepareSession(c))
       @@ TestAspect.after(deleteSession())
       @@ TestAspect.after(ZIO.succeed(FileSystem.deleteAllFiles(otpBasePath.toFile().nn))),
-    test("POST / GET bad verifier / GET -> 200, 402, 200, content") {
+    test("POST / GET bad verifier / GET -> 200, 403, 200, content") {
       for {
         statusCodePost <- app(prepareSave(otpHash, goodBlob, true)).map(response => response.status.code)
         statusCodeGet <- app(prepareGet(otpHash, badVerifier, true)).map(res => res.status.code)
         response <- app(prepareGet(otpHash, goodVerifier, true))
         blob <- fromStream[UsedOTPBlob](response.body.asStream)
-      } yield assertTrue(statusCodePost == 200, statusCodeGet == 402, response.status.code == 200, blob.verifier == goodVerifier, blob.useCase == OTPUseCases.DISABLED)
+      } yield assertTrue(statusCodePost == 200, statusCodeGet == 403, response.status.code == 200, blob.verifier == goodVerifier, blob.useCase == OTPUseCases.DISABLED)
     } @@ TestAspect.before(ZIO.succeed(FileSystem.deleteAllFiles(otpBasePath.toFile().nn)))
       @@ TestAspect.before(prepareSession(c))
       @@ TestAspect.after(deleteSession())
