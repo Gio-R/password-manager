@@ -63,10 +63,22 @@ instance encodeJsonUserPreferencesReference :: EncodeJson UserPreferencesReferen
 instance decodeJsonUserPreferencesReference :: DecodeJson UserPreferencesReference where
   decodeJson json = rmap (\record -> UserPreferencesReference record) (decodeJson json)
 
+newtype OTPReference =
+  OTPReference
+    { otp :: String
+    }
+
+instance encodeJsonOTPReference :: EncodeJson OTPReference where
+  encodeJson (OTPReference record) = encodeJson record
+
+instance decodeJsonOTPReference :: DecodeJson OTPReference where
+  decodeJson json = rmap (\record -> OTPReference record) (decodeJson json)
+
 newtype UserInfoReferences =
   UserInfoReferences 
     { preferencesReference :: UserPreferencesReference
     , indexReference :: IndexReference
+    , otpReferences :: Array OTPReference
     }
 
 instance encodeJsonUserInfoReferences :: EncodeJson UserInfoReferences where

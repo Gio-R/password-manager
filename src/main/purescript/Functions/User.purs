@@ -155,3 +155,6 @@ decryptUserInfoReferences encryptedRef = do
   where 
     mapCryptoError :: forall a. ExceptT EX.Error Aff a -> ExceptT AppError Aff a
     mapCryptoError = withExceptT (\e -> ProtocolError $ CryptoError $ "Decrypt UserInfoReferences: " <> EX.message e)
+
+getOTPs :: ExceptT AppError Aff (Array OTP)
+getOTPs = 
