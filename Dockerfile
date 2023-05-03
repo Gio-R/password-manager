@@ -28,8 +28,9 @@ COPY ./ ./
 RUN sbt 'set test in assembly := {}' clean assembly
 
 FROM openjdk:jre-alpine
+WORKDIR /app
 COPY --from=frontend /app/target/output.webpack ./target/output.webpack
-COPY --from=backend '/app/target/*/clipperz.jar' /app/target/clipperz.jar
+COPY --from=backend '/app/target/*/clipperz.jar' ./target/clipperz.jar
 # CMD [ "java", "-jar", "/app/target/clipperz.jar", "/archive/blob", "/archive/user", "/archive/one_time_share", "8080"]
 ENTRYPOINT [ "java"]
 CMD ["-jar", "/app/target/clipperz.jar"]
