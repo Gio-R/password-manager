@@ -10,7 +10,10 @@ COPY spago.dhall      spago.dhall
 COPY webpack.config.js webpack.config.js
 # COPY yarn.lock        yarn.lock
 
+# RUN npm install -g purescript-installer@0.3.3
 RUN npm install -g purescript@0.15.7
+# RUN install-purescript --purs-ver=0.15.7
+# ENV PATH="${PATH}:/app"
 RUN npm install -g yarn@1.22.19 --force
 RUN yarn install
 RUN mkdir ./target
@@ -28,4 +31,5 @@ FROM openjdk:jre-alpine
 WORKDIR /app
 COPY --from=frontend /app/target/output.webpack ./target/output.webpack
 COPY --from=backend '/app/target/*/*.jar' ./target/clipperz.jar 
-CMD [ "java", "-jar", "/app/target/clipperz.jar", "/archive/blob", "/archive/user", "/archive/one_time_share", "8080"]
+# CMD [ "java", "-jar", "/app/target/clipperz.jar", "/archive/blob", "/archive/user", "/archive/one_time_share", "8080"]
+ENTRYPOINT [ "java", "-jar", "/app/target/clipperz.jar"]
