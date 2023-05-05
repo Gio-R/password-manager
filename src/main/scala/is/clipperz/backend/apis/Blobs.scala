@@ -3,8 +3,8 @@ package is.clipperz.backend.apis
 import java.io.FileNotFoundException
 import zio.ZIO
 import zio.stream.ZStream
-import zhttp.http.{ Headers, HeaderNames, HeaderValues, Http, Body, Method, Path, PathSyntax, Response, Status }
-import zhttp.http.* //TODO: fix How do you import `!!` and `/`?
+import zio.http.{ Headers, Http, Body, /*HeaderValues,*/ Method, Path, PathSyntax, Response, Status }
+import zio.http.* //TODO: fix How do you import `!!` and `/`?
 import is.clipperz.backend.data.HexString
 import is.clipperz.backend.exceptions.{
   NonWritableArchiveException,
@@ -19,15 +19,29 @@ import is.clipperz.backend.exceptions.EmptyContentException
 import is.clipperz.backend.exceptions.BadRequestException
 import zio.Cause
 import is.clipperz.backend.LogAspect
+import zio.http.codec.HeaderCodec
+import zio.http.Header.ContentTransferEncoding
+import zio.stream.ZSink
+import zio.http.Header.ContentType
 
-val blobsApi: ClipperzHttpApp = Http.collectZIO {
+val blobsApi: ClipperzHttpApp = Http.collectZIO[Request] {
   case request @ Method.POST -> !! / "blobs" =>
     ZIO
       .service[BlobArchive]
-      .zip(ZIO.succeed(request.body.asStream))
-      .flatMap((archive, bytes) =>
-        fromStream[SaveBlobData](bytes)
-          .flatMap(saveData => archive.saveBlob(saveData.hash, ZStream.fromIterable(saveData.data.toByteArray)))
+      .zip(request.body.asMultipartFormStream)
+      .flatMap((archive, stream) =>
+        stream.fields
+          .filter(field => field.name == "blob")
+          .run(ZSink.last)
+          .flatMap(field => 
+            field match {
+              case Some(FormField.StreamingBinary(_, _, _, filename, data)) =>
+                ZIO.attempt(HexString(filename.get))
+                   .flatMap(hash => archive.saveBlob(hash, data))
+              case _ =>
+                ZIO.fail(new BadRequestException("Parameter 'file' must be a binary file"))
+            }
+          )
       )
       .map(results => Response.text(s"${results}"))
       .catchSome {
@@ -45,16 +59,25 @@ val blobsApi: ClipperzHttpApp = Http.collectZIO {
   case request @ Method.DELETE -> !! / "blobs" / hash =>
     ZIO
       .service[BlobArchive]
-      .zip(ZIO.succeed(request.body.asStream))
-      .flatMap((archive, bytes) =>
-        fromStream[SaveBlobData](bytes)
-          .flatMap(blobData =>
-            if (blobData.hash.toString() == hash) ZIO.succeed(blobData)
-            else ZIO.fail(new BadRequestException("Different hashes"))
+      .zip(request.body.asMultipartFormStream)
+      .flatMap((archive, stream) =>
+        stream.fields
+          .filter(field => field.name == "blob")
+          .run(ZSink.last)
+          .flatMap(field => 
+            field match {
+              case Some(FormField.StreamingBinary(_, _, _, filename, data)) =>
+                ZIO.attempt(HexString(filename.get))
+                   .flatMap(hash => archive.deleteBlob(hash, data))
+              case _ =>
+                ZIO.fail(new BadRequestException("Parameter 'file' must be a binary file"))
+            }
           )
-          .flatMap(blobData => archive.deleteBlob(ZStream.fromIterable(blobData.data.toByteArray)))
       )
-      .map(b => if b then Response.ok else Response(status = Status.NotFound))
+      .map {
+        case true  => Response.ok
+        case false => Response(status = Status.NotFound)
+      } 
       .catchSome {
         case ex: BadRequestException =>
           ZIO.logInfoCause(s"${ex.getMessage()}", Cause.fail(ex)).as(Response(status = Status.BadRequest))
@@ -73,7 +96,8 @@ val blobsApi: ClipperzHttpApp = Http.collectZIO {
         Response(
           status = Status.Ok,
           body = Body.fromStream(bytes),
-          headers = Headers(HeaderNames.contentType, HeaderValues.applicationOctetStream),
+          headers = Headers(ContentTransferEncoding.Binary)
+                      .addHeader("Content-Type", "application/octet-stream"),
         )
       )
       .catchSome {

@@ -1,7 +1,5 @@
 # FROM --platform=linux/amd64 node:18 AS frontend
 FROM  node:18.15.0 AS frontend
-ARG CURRENT_COMMIT_ARG
-ENV CURRENT_COMMIT=$CURRENT_COMMIT_ARG
 WORKDIR /app
 COPY ./src ./src
 COPY package.json     package.json
@@ -13,7 +11,6 @@ COPY webpack.config.js webpack.config.js
 # RUN npm install -g purescript-installer@0.3.3
 RUN npm install -g purescript@0.15.7
 # RUN install-purescript --purs-ver=0.15.7
-# ENV PATH="${PATH}:/app"
 RUN npm install -g yarn@1.22.19 --force
 RUN yarn install
 RUN mkdir ./target
@@ -27,7 +24,11 @@ COPY ./ ./
 # remove option to remove tests when everything else works
 RUN sbt 'set test in assembly := {}' clean assembly
 
-FROM openjdk:jre-alpine
+FROM eclipse-temurin:17.0.7_7-jre
+ARG CURRENT_COMMIT_ARG
+ENV CURRENT_COMMIT=$CURRENT_COMMIT_ARG
+RUN addgroup --system clipperz && adduser --system clipperz --ingroup clipperz
+USER clipperz
 WORKDIR /app
 COPY --from=frontend /app/target/output.webpack ./target/output.webpack
 COPY --from=backend '/app/target/*/*.jar' ./target/clipperz.jar 
