@@ -32,5 +32,6 @@ USER clipperz
 WORKDIR /app
 COPY --from=frontend /app/target/output.webpack ./target/output.webpack
 COPY --from=backend '/app/target/*/*.jar' ./target/clipperz.jar 
+RUN chmod -R 755 ./
 # CMD [ "java", "-jar", "/app/target/clipperz.jar", "/archive/blob", "/archive/user", "/archive/one_time_share", "8080"]
 ENTRYPOINT [ "java", "-jar", "/app/target/clipperz.jar"]
