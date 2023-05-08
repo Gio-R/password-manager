@@ -28,11 +28,11 @@ RUN sbt 'set test in assembly := {}' clean assembly
 
 FROM eclipse-temurin:17.0.6_10-jre-alpine
 WORKDIR /app
-RUN addgroup --system clipperz && adduser --system clipperz --ingroup clipperz
-RUN chown -R clipperz: ./
-USER clipperz
 COPY --from=frontend /app/target/output.webpack ./target/output.webpack
 COPY --from=backend '/app/target/*/*.jar' ./target/clipperz.jar 
-RUN chmod -R 755 ./
+RUN chmod -R 755 ./ && \
+    addgroup --system clipperz && adduser --system clipperz --ingroup clipperz && \
+    chown -R clipperz: ./
+USER clipperz
 # CMD [ "java", "-jar", "/app/target/clipperz.jar", "/archive/blob", "/archive/user", "/archive/one_time_share", "8080"]
 ENTRYPOINT [ "java", "-jar", "/app/target/clipperz.jar"]
