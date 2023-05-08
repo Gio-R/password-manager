@@ -9,6 +9,7 @@ COPY packages.dhall   	packages.dhall
 COPY spago.dhall      	spago.dhall
 COPY webpack.config.js	webpack.config.js
 COPY package-lock.json	package-lock.json
+COPY ./.git ./.git
 
 # RUN npm install -g purescript-installer@0.3.3
 RUN npm ci
