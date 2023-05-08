@@ -16,7 +16,7 @@ RUN npm ci
 RUN mkdir ./target
 RUN npm run build
 # RUN yarn spago --jobs 10 build --purs-args '--codegen js,sourcemaps -o ./target/output.purescript' -v
-RUN ls ./src/main/js && npm run package --env production
+RUN ls ./src/main/js && npm run package -- --env production
 # RUN ls ./src/main/js && yarn package
 
 FROM sbtscala/scala-sbt:eclipse-temurin-17.0.4_1.7.1_3.2.0 AS backend
